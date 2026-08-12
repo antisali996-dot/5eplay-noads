@@ -31,6 +31,8 @@ jobs:
       - name: Install LLVM (clang + ld64.lld)
         run: |
           brew install llvm
+          echo "--- llvm bin (ld* lld*) ---"
+          ls -1 "$(brew --prefix llvm)/bin" | grep -iE 'ld|lld' || true
 
       - name: Compile object (clang -c)
         run: |
