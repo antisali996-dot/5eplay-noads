@@ -73,13 +73,23 @@ jobs:
           tar -xf llvm.tar.xz -C "${{ runner.temp }}/llvm19"
 
       # 硬性检查：clang 与 ld64.lld 必须存在，缺失立即失败并报告，不切换方案
+      - name: Inspect extracted package (diagnostic)
+        run: |
+          ROOT="${{ runner.temp }}/llvm19"
+          echo "=== top-level ==="
+          ls -la "$ROOT"
+          echo "=== dirs (depth 3) ==="
+          find "$ROOT" -maxdepth 3 -type d | head -40
+          echo "=== bin listing ==="
+          find "$ROOT" -type d -name bin | head -10
+
       - name: Locate toolchain binaries
         id: llvm
         run: |
           ROOT="${{ runner.temp }}/llvm19"
-          LLVM_BIN="$(find "$ROOT" -type f -name clang -path '*/bin/*' | head -1 | xargs dirname)"
-          test -n "$LLVM_BIN" || { echo "MISSING: clang not found in LLVM 19.1.7 package"; exit 1; }
-          test -x "$LLVM_BIN/clang" || { echo "MISSING: clang not executable"; exit 1; }
+          LLVM_BIN="$(find "$ROOT" -type d -name bin | head -1)"
+          test -n "$LLVM_BIN" || { echo "MISSING: bin dir not found in LLVM 19.1.7 package"; exit 1; }
+          test -x "$LLVM_BIN/clang" || { echo "MISSING: clang not found/executable at $LLVM_BIN"; exit 1; }
           test -x "$LLVM_BIN/ld64.lld" || { echo "MISSING: ld64.lld not found in LLVM 19.1.7 package at $LLVM_BIN"; exit 1; }
           echo "llvm_bin=$LLVM_BIN" >> "$GITHUB_OUTPUT"
 
