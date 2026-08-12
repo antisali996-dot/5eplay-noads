@@ -12,9 +12,40 @@ permissions:
   contents: read
 
 jobs:
-  build:
-    name: Build & verify dylib
+  # ---- 轻量检查：普通 PR / push main 时运行，不下载 1.4GB LLVM ----
+  lint:
+    name: Lint & syntax (lightweight)
     runs-on: macos-14
+    if: github.event_name != 'workflow_dispatch' && !startsWith(github.ref, 'refs/tags/v')
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Source files present
+        run: |
+          test -f src/hook.m
+          test -f tools/check_macho.py
+          test -f build.cmd
+
+      - name: check_macho.py syntax
+        run: python3 -m py_compile tools/check_macho.py
+
+      - name: ObjC syntax check (Xcode clang, no link, no dylib)
+        run: |
+          SDK_PATH="$(xcrun --sdk iphoneos --show-sdk-path)"
+          xcrun --sdk iphoneos clang \
+            -target arm64-apple-ios16.5 \
+            -arch arm64 \
+            -isysroot "$SDK_PATH" \
+            -fobjc-arc \
+            -fsyntax-only \
+            src/hook.m
+
+  # ---- 完整构建：release tag 或手动触发，使用固定 LLVM 19.1.7 + ld64.lld ----
+  build:
+    name: Build dylib (LLVM 19.1.7 + ld64.lld)
+    runs-on: macos-14
+    if: github.event_name == 'workflow_dispatch' || startsWith(github.ref, 'refs/tags/v')
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -24,40 +55,53 @@ jobs:
         run: |
           SDK_PATH="$(xcrun --sdk iphoneos --show-sdk-path)"
           echo "sdk_path=$SDK_PATH" >> "$GITHUB_OUTPUT"
-          echo "Resolved SDK: $SDK_PATH"
 
-      # Local toolchain is clang + ld64.lld (LLVM). Homebrew LLVM ships both,
-      # giving byte-identical linker behavior (CHAINED_FIXUPS + __init_offsets).
-      - name: Install LLVM (clang + ld64.lld)
-        run: |
-          brew install llvm
-          echo "--- llvm bin (ld* lld*) ---"
-          ls -1 "$(brew --prefix llvm)/bin" | grep -iE 'ld|lld' || true
+      # 固定版本 19.1.7（官方最后提供 macOS-ARM64 预编译包的版本），不使用 latest
+      - name: Cache pinned LLVM 19.1.7
+        id: llvm-cache
+        uses: actions/cache@v4
+        with:
+          path: ${{ runner.temp }}/llvm19
+          key: llvm-19.1.7-macos-arm64
 
-      - name: Compile object (clang -c)
+      - name: Download & extract pinned LLVM 19.1.7
+        if: steps.llvm-cache.outputs.cache-hit != 'true'
         run: |
-          LLVM_BIN="$(brew --prefix llvm)/bin"
-          SDK_PATH="${{ steps.sdk.outputs.sdk_path }}"
-          "$LLVM_BIN/clang" \
+          mkdir -p "${{ runner.temp }}/llvm19"
+          curl -fL -o llvm.tar.xz \
+            "https://github.com/llvm/llvm-project/releases/download/llvmorg-19.1.7/LLVM-19.1.7-macOS-ARM64.tar.xz"
+          tar -xf llvm.tar.xz -C "${{ runner.temp }}/llvm19"
+
+      # 硬性检查：clang 与 ld64.lld 必须存在，缺失立即失败并报告，不切换方案
+      - name: Locate toolchain binaries
+        id: llvm
+        run: |
+          ROOT="${{ runner.temp }}/llvm19"
+          LLVM_BIN="$(find "$ROOT" -type f -name clang -path '*/bin/*' | head -1 | xargs dirname)"
+          test -n "$LLVM_BIN" || { echo "MISSING: clang not found in LLVM 19.1.7 package"; exit 1; }
+          test -x "$LLVM_BIN/clang" || { echo "MISSING: clang not executable"; exit 1; }
+          test -x "$LLVM_BIN/ld64.lld" || { echo "MISSING: ld64.lld not found in LLVM 19.1.7 package at $LLVM_BIN"; exit 1; }
+          echo "llvm_bin=$LLVM_BIN" >> "$GITHUB_OUTPUT"
+
+      - name: Toolchain versions
+        run: |
+          "${{ steps.llvm.outputs.llvm_bin }}/clang" --version
+          "${{ steps.llvm.outputs.llvm_bin }}/ld64.lld" --version
+          echo "SDK: ${{ steps.sdk.outputs.sdk_path }}"
+
+      - name: Compile dylib (LLVM clang + ld64.lld)
+        run: |
+          echo "${{ steps.llvm.outputs.llvm_bin }}" >> "$GITHUB_PATH"
+          mkdir -p out
+          "${{ steps.llvm.outputs.llvm_bin }}/clang" \
             -target arm64-apple-ios16.5 \
             -arch arm64 \
-            -isysroot "$SDK_PATH" \
+            -isysroot "${{ steps.sdk.outputs.sdk_path }}" \
             -fobjc-arc -fno-stack-protector -fvisibility=hidden \
-            -c src/hook.m -o hook.o
-
-      - name: Link dylib (ld64.lld)
-        run: |
-          LLVM_BIN="$(brew --prefix llvm)/bin"
-          SDK_PATH="${{ steps.sdk.outputs.sdk_path }}"
-          mkdir -p out
-          "$LLVM_BIN/ld64.lld" \
-            -dylib \
-            -arch arm64 \
-            -platform_version ios 16.5 0 \
-            -isysroot "$SDK_PATH" \
-            -undefined dynamic_lookup \
+            -fuse-ld=lld \
+            -dynamiclib -undefined dynamic_lookup \
             -o out/NoBrandSplash.dylib \
-            hook.o
+            src/hook.m
 
       - name: Verify Mach-O structure
         run: |
