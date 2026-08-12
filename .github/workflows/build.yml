@@ -26,19 +26,26 @@ jobs:
           echo "sdk_path=$SDK_PATH" >> "$GITHUB_OUTPUT"
           echo "Resolved SDK: $SDK_PATH"
 
-      - name: Compile (Xcode clang + lld)
+      - name: Install LLVM (clang + ld64.lld, same toolchain as local)
+        run: |
+          brew install llvm
+          echo "$(brew --prefix llvm)/bin" >> "$GITHUB_PATH"
+
+      - name: Compile (clang + ld64.lld)
         run: |
           mkdir -p out
-          xcrun --sdk iphoneos clang \
+          LLVM_BIN="$(brew --prefix llvm)/bin"
+          SDK_PATH="${{ steps.sdk.outputs.sdk_path }}"
+          "$LLVM_BIN/clang" \
             -target arm64-apple-ios16.5 \
             -arch arm64 \
-            -isysroot "${{ steps.sdk.outputs.sdk_path }}" \
+            -isysroot "$SDK_PATH" \
             -fobjc-arc -fno-stack-protector -fvisibility=hidden \
             -fuse-ld=lld \
             -dynamiclib -undefined dynamic_lookup \
             -o out/NoBrandSplash.dylib \
             src/hook.m
-          # lld emits chained fixups for iOS 15+ by default; verify below
+          # lld emits CHAINED_FIXUPS + __init_offsets for iOS 15+ (same as local build)
 
       - name: Verify Mach-O structure
         run: |
