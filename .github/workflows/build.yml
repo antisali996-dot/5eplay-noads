@@ -32,6 +32,7 @@ jobs:
           xcrun --sdk iphoneos clang \
             -target arm64-apple-ios16.5 \
             -arch arm64 \
+            -miphoneos-version-min=15.0 \
             -isysroot "${{ steps.sdk.outputs.sdk_path }}" \
             -fobjc-arc -fno-stack-protector -fvisibility=hidden \
             -dynamiclib -undefined dynamic_lookup \
