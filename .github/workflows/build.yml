@@ -36,6 +36,7 @@ jobs:
             -isysroot "${{ steps.sdk.outputs.sdk_path }}" \
             -fobjc-arc -fno-stack-protector -fvisibility=hidden \
             -dynamiclib -undefined dynamic_lookup \
+            -Wl,-fixup_chains \
             -o out/NoBrandSplash.dylib \
             src/hook.m
 
