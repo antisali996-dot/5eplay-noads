@@ -99,11 +99,14 @@ def main(path):
         print("         switch to clang + ld64.lld; see references/macho-debug.md trap 1")
         ok = False
 
-    # 2. __init_offsets
+    # 2. constructor mechanism: __init_offsets (lld) OR __mod_init_func (ld64)
+    has_constructor_marker = r["has_init_offsets"] or bool(r["mod_init"])
     if r["has_init_offsets"]:
-        print("  [PASS] __init_offsets section present")
+        print("  [PASS] __init_offsets section present (lld new-style constructor)")
+    elif r["mod_init"]:
+        print("  [PASS] __mod_init_func section present (ld64-style constructor)")
     else:
-        print("  [WARN] missing __init_offsets — check toolchain (lld expected)")
+        print("  [FAIL] no constructor marker (neither __init_offsets nor __mod_init_func)")
         ok = False
 
     # 3. __mod_init_func pointers include image base

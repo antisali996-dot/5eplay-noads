@@ -1,0 +1,51 @@
+name: build
+
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Build & verify dylib
+    runs-on: macos-14
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Resolve iPhoneOS SDK
+        id: sdk
+        run: |
+          SDK_PATH="$(xcrun --sdk iphoneos --show-sdk-path)"
+          echo "sdk_path=$SDK_PATH" >> "$GITHUB_OUTPUT"
+          echo "Resolved SDK: $SDK_PATH"
+
+      - name: Compile (Xcode clang)
+        run: |
+          mkdir -p out
+          xcrun --sdk iphoneos clang \
+            -target arm64-apple-ios16.5 \
+            -arch arm64 \
+            -isysroot "${{ steps.sdk.outputs.sdk_path }}" \
+            -fobjc-arc -fno-stack-protector -fvisibility=hidden \
+            -dynamiclib -undefined dynamic_lookup \
+            -o out/NoBrandSplash.dylib \
+            src/hook.m
+
+      - name: Verify Mach-O structure
+        run: |
+          python3 tools/check_macho.py out/NoBrandSplash.dylib
+          file out/NoBrandSplash.dylib
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: NoBrandSplash.dylib
+          path: out/NoBrandSplash.dylib
+          if-no-files-found: error
