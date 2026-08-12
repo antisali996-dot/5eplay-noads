@@ -26,19 +26,19 @@ jobs:
           echo "sdk_path=$SDK_PATH" >> "$GITHUB_OUTPUT"
           echo "Resolved SDK: $SDK_PATH"
 
-      - name: Compile (Xcode clang)
+      - name: Compile (Xcode clang + lld)
         run: |
           mkdir -p out
           xcrun --sdk iphoneos clang \
             -target arm64-apple-ios16.5 \
             -arch arm64 \
-            -miphoneos-version-min=15.0 \
             -isysroot "${{ steps.sdk.outputs.sdk_path }}" \
             -fobjc-arc -fno-stack-protector -fvisibility=hidden \
+            -fuse-ld=lld \
             -dynamiclib -undefined dynamic_lookup \
-            -Wl,-fixup_chains \
             -o out/NoBrandSplash.dylib \
             src/hook.m
+          # lld emits chained fixups for iOS 15+ by default; verify below
 
       - name: Verify Mach-O structure
         run: |
