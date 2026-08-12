@@ -73,16 +73,6 @@ jobs:
           tar -xf llvm.tar.xz -C "${{ runner.temp }}/llvm19"
 
       # 硬性检查：clang 与 ld64.lld 必须存在，缺失立即失败并报告，不切换方案
-      - name: Inspect extracted package (diagnostic)
-        run: |
-          ROOT="${{ runner.temp }}/llvm19"
-          echo "=== top-level ==="
-          ls -la "$ROOT"
-          echo "=== dirs (depth 3) ==="
-          find "$ROOT" -maxdepth 3 -type d | head -40
-          echo "=== bin listing ==="
-          find "$ROOT" -type d -name bin | head -10
-
       - name: Locate toolchain binaries
         id: llvm
         run: |
