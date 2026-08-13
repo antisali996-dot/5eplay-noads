@@ -7,6 +7,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [3.0.0] - 2026-08-13
+
+### Changed
+
+- 正式版：移除全部诊断弹窗/计数（HOOK HIT 等）
+- 保留「NoBrandSplash Injected OK」注入确认弹窗（UIAlertView + NSTimer 1 秒自动消失，QSNoAds v25 同款方案）
+- 弹窗通知机制改用 NSNotificationCenter block 观察者（主线程回调，弹窗可靠显示）
+- 设备验证通过：冷启动 / 热启动均无 Splash 广告，`handleAdInfo:` 单点 Hook 完整覆盖品牌 + 第三方聚合
+
+## [2.0.0] - 2026-08-13
+
+### Changed
+
+- Splash Hook 点从 `handleBrandAd:` 迁移到 `handleAdInfo:`
+- 覆盖品牌 Splash 与第三方聚合 Splash（CSJ / GDT / OCT / BeiZi / CJMobile / Sigmob）
+- 同时覆盖冷启动与热启动
+- 使用 `closeController:YES` 正常结束 Splash 生命周期
+- 避免写入 `saveFailSplashADDate`
+
 ## [1.0.0] - 2026-08-12
 
 ### Added
